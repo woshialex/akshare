@@ -9,11 +9,12 @@ import datetime
 import json
 import re
 import zipfile
-from io import BytesIO, StringIO
+from io import BytesIO
 
 import numpy as np
 import pandas as pd
 import requests
+from bs4 import BeautifulSoup
 
 from akshare.futures import cons
 from akshare.futures.requests_fun import requests_link
@@ -539,21 +540,18 @@ def get_dce_daily(date: str = "20220308") -> pd.DataFrame:
         return pd.DataFrame()
     url = "http://portal.dce.com.cn/publicweb/quotesdata/exportDayQuotesChData.html"
     headers = {
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,"
-        "application/signed-exchange;v=b3;q=0.9",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8",
         "Accept-Encoding": "gzip, deflate",
         "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
         "Cache-Control": "no-cache",
         "Connection": "keep-alive",
-        "Content-Length": "86",
         "Content-Type": "application/x-www-form-urlencoded",
-        "Host": "www.dce.com.cn",
+        "Host": "portal.dce.com.cn",
         "Origin": "http://portal.dce.com.cn",
         "Pragma": "no-cache",
         "Referer": "http://portal.dce.com.cn/publicweb/quotesdata/dayQuotesCh.html",
         "Upgrade-Insecure-Requests": "1",
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/84.0.4147.105 Safari/537.36",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
     }
     params = {
         "dayQuotes.variety": "all",
@@ -564,9 +562,70 @@ def get_dce_daily(date: str = "20220308") -> pd.DataFrame:
         "exportFlag": "excel",
     }
     r = requests.post(url, data=params, headers=headers)
-    data_df = pd.read_excel(BytesIO(r.content), header=1)
-    data_df = data_df[~data_df["商品名称"].str.contains("小计")]
-    data_df = data_df[~data_df["商品名称"].str.contains("总计")]
+    
+    # Check if response is HTML (table format) or Excel
+    if 'text/html' in r.headers.get('content-type', '').lower() or r.text.strip().startswith('<'):
+        # Parse HTML table
+        soup = BeautifulSoup(r.text, 'html.parser')
+        
+        # Find the data table
+        table = soup.find('table')
+        if not table:
+            raise ValueError("No table found in HTML response")
+        
+        # Extract table data
+        rows = table.find_all('tr')
+        if len(rows) < 2:
+            raise ValueError("Table has insufficient data rows")
+        
+        # Get headers from first row (skip if it's a header row)
+        headers_row = rows[1] if len(rows) > 1 else rows[0]
+        
+        # Extract data rows (skip header rows)
+        data_rows = []
+        for row in rows[2:]:  # Skip first two rows (headers)
+            cells = row.find_all(['td', 'th'])
+            if len(cells) > 0:
+                row_data = [cell.get_text(strip=True) for cell in cells]
+                if len(row_data) >= 10:  # Ensure we have enough columns
+                    data_rows.append(row_data)
+        
+        if not data_rows:
+            raise ValueError("No data rows found in table")
+        
+        # Create DataFrame from extracted data
+        # Expected columns: 商品名称, 合约名称, 开盘价, 最高价, 最低价, 收盘价, 前结算价, 结算价, 涨跌, 涨跌1, 成交量, 持仓量, 持仓量变化, 成交额
+        column_names = ['商品名称', '合约名称', '开盘价', '最高价', '最低价', '收盘价', '前结算价', '结算价', '涨跌', '涨跌1', '成交量', '持仓量', '持仓量变化', '成交额']
+        
+        # Pad or trim data rows to match expected columns
+        processed_rows = []
+        for row in data_rows:
+            if len(row) >= len(column_names):
+                processed_rows.append(row[:len(column_names)])
+            else:
+                # Pad with empty strings if row is too short
+                padded_row = row + [''] * (len(column_names) - len(row))
+                processed_rows.append(padded_row)
+        
+        data_df = pd.DataFrame(processed_rows, columns=column_names)
+        
+    else:
+        # Try to parse as Excel
+        try:
+            data_df = pd.read_excel(BytesIO(r.content), header=1)
+        except Exception as e:
+            # If Excel parsing fails, try with different engines
+            try:
+                data_df = pd.read_excel(BytesIO(r.content), header=1, engine='openpyxl')
+            except:
+                try:
+                    data_df = pd.read_excel(BytesIO(r.content), header=1, engine='xlrd')
+                except:
+                    raise ValueError(f"Could not parse response as Excel: {e}")
+    
+    # Filter out summary rows
+    data_df = data_df[~data_df["商品名称"].str.contains("小计", na=False)]
+    data_df = data_df[~data_df["商品名称"].str.contains("总计", na=False)]
     data_df["variety"] = data_df["商品名称"].map(lambda x: cons.DCE_MAP[x])
     data_df["symbol"] = data_df["合约名称"]
     del data_df["商品名称"]
