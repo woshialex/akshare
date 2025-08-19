@@ -9,7 +9,7 @@ import datetime
 import json
 import re
 import zipfile
-from io import BytesIO
+from io import BytesIO, StringIO
 
 import numpy as np
 import pandas as pd
@@ -742,25 +742,25 @@ def get_futures_daily(
 
 
 if __name__ == "__main__":
-    get_futures_daily_df = get_futures_daily(
-        start_date="20250708", end_date="20250708", market="DCE"
-    )
-    print(get_futures_daily_df)
+    # get_futures_daily_df = get_futures_daily(
+    #     start_date="20250708", end_date="20250708", market="DCE"
+    # )
+    # print(get_futures_daily_df)
 
-    get_dce_daily_df = get_dce_daily(date="20241118")
-    print(get_dce_daily_df)
+    # get_dce_daily_df = get_dce_daily(date="20241118")
+    # print(get_dce_daily_df)
 
-    get_cffex_daily_df = get_cffex_daily(date="20230810")
+    get_cffex_daily_df = get_cffex_daily(date="20250815")
     print(get_cffex_daily_df)
 
-    get_ine_daily_df = get_ine_daily(date="20230818")
-    print(get_ine_daily_df)
+    # get_ine_daily_df = get_ine_daily(date="20230818")
+    # print(get_ine_daily_df)
 
-    get_czce_daily_df = get_czce_daily(date="20210513")
-    print(get_czce_daily_df)
+    # get_czce_daily_df = get_czce_daily(date="20210513")
+    # print(get_czce_daily_df)
 
-    get_shfe_daily_df = get_shfe_daily(date="20250630")
-    print(get_shfe_daily_df)
+    # get_shfe_daily_df = get_shfe_daily(date="20250630")
+    # print(get_shfe_daily_df)
 
-    get_gfex_daily_df = get_gfex_daily(date="20221228")
-    print(get_gfex_daily_df)
+    # get_gfex_daily_df = get_gfex_daily(date="20221228")
+    # print(get_gfex_daily_df)
